@@ -1,0 +1,41 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Task {
+  id        String   @id @default(cuid())
+  name      String
+  details   String?
+  day       String
+  timeSlot  String
+  channels  String
+  status    String   @default("todo")
+  week      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WeeklyMetric {
+  id          String  @id @default(cuid())
+  week        String  @unique
+  newSignups  Int     @default(0)
+  activeUsers Int     @default(0)
+  revenue     Int     @default(0)
+  bestPost    String?
+  notes       String?
+}
+
+model ContentIdea {
+  id        String   @id @default(cuid())
+  title     String
+  channel   String
+  format    String
+  hook      String?
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
