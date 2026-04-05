@@ -31,11 +31,12 @@ model WeeklyMetric {
 }
 
 model ContentIdea {
-  id        String   @id @default(cuid())
-  title     String
-  channel   String
-  format    String
-  hook      String?
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  title       String
+  channel     String
+  format      String
+  hook        String?
+  description String?
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
 }

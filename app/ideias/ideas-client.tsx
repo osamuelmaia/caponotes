@@ -13,6 +13,7 @@ interface ContentIdea {
   channel: string
   format: string
   hook: string | null
+  description: string | null
   used: boolean
   createdAt: string | Date
 }
@@ -50,6 +51,77 @@ function FormatBadge({ format }: { format: string }) {
   )
 }
 
+function IdeaCard({ idea, onToggleUsed }: { idea: ContentIdea; onToggleUsed: (idea: ContentIdea) => void }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div
+      className={cn(
+        "bg-[#111111] border border-[#222222] rounded-xl p-4 flex flex-col gap-3",
+        "hover:border-[#333] transition-colors",
+        idea.used && "opacity-50"
+      )}
+    >
+      {/* Channel + Format */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <ChannelBadge channel={idea.channel} small />
+        <FormatBadge format={idea.format} />
+      </div>
+
+      {/* Title */}
+      <p className={cn("text-sm font-medium text-white leading-snug", idea.used && "line-through")}>
+        {idea.title}
+      </p>
+
+      {/* Hook */}
+      {idea.hook && (
+        <p className="text-xs text-[#666] italic leading-snug">
+          &ldquo;{idea.hook}&rdquo;
+        </p>
+      )}
+
+      {/* Description (briefing) */}
+      {idea.description && (
+        <div>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-1.5 text-[10px] font-medium text-[#555] hover:text-[#888] transition-colors mb-1.5"
+          >
+            <span className={cn("transition-transform duration-150", expanded ? "rotate-90" : "rotate-0")}>▶</span>
+            {expanded ? "Ocultar briefing" : "Ver briefing"}
+          </button>
+          {expanded && (
+            <p className="text-xs text-[#777] leading-relaxed bg-[#0d0d0d] border border-[#1e1e1e] rounded-lg p-3 whitespace-pre-wrap">
+              {idea.description}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Used toggle */}
+      <div className="mt-auto pt-2 border-t border-[#1a1a1a]">
+        <button
+          onClick={() => onToggleUsed(idea)}
+          className={cn(
+            "flex items-center gap-2 text-xs font-medium transition-colors",
+            idea.used ? "text-[#555] hover:text-[#888]" : "text-[#666] hover:text-green-400"
+          )}
+        >
+          <div
+            className={cn(
+              "w-4 h-4 rounded border-2 flex items-center justify-center transition-colors",
+              idea.used ? "bg-[#555] border-[#555]" : "border-[#444] hover:border-[#666]"
+            )}
+          >
+            {idea.used && <Check size={10} className="text-white" />}
+          </div>
+          {idea.used ? "Usada" : "Marcar como usada"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
   // Normalize used field: Turso returns 0/1 (integers), coerce to boolean
   const [ideas, setIdeas] = useState<ContentIdea[]>(
@@ -64,6 +136,7 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
     channel: "Twitter/X",
     format: "Thread",
     hook: "",
+    description: "",
   })
 
   const filtered = ideas.filter((idea) => {
@@ -85,6 +158,7 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
           channel: form.channel,
           format: form.format,
           hook: form.hook || null,
+          description: form.description || null,
         }),
       })
       if (!res.ok) throw new Error("Erro ao criar")
@@ -92,7 +166,7 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
       setIdeas((prev) => [{ ...created, used: Boolean(created.used) }, ...prev])
       toast.success("Ideia criada!")
       setModalOpen(false)
-      setForm({ title: "", channel: "Twitter/X", format: "Thread", hook: "" })
+      setForm({ title: "", channel: "Twitter/X", format: "Thread", hook: "", description: "" })
     } catch {
       toast.error("Erro ao criar ideia")
     } finally {
@@ -212,63 +286,8 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
           <p className="text-[#555] text-sm">Nenhuma ideia encontrada com esses filtros.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((idea) => (
-            <div
-              key={idea.id}
-              className={cn(
-                "bg-[#111111] border border-[#222222] rounded-xl p-4 flex flex-col gap-3",
-                "hover:border-[#333] transition-colors",
-                idea.used && "opacity-50"
-              )}
-            >
-              {/* Channel + Format */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <ChannelBadge channel={idea.channel} small />
-                <FormatBadge format={idea.format} />
-              </div>
-
-              {/* Title */}
-              <p className={cn(
-                "text-sm font-medium text-white leading-snug",
-                idea.used && "line-through"
-              )}>
-                {idea.title}
-              </p>
-
-              {/* Hook */}
-              {idea.hook && (
-                <p className="text-xs text-[#666] italic leading-snug">
-                  &ldquo;{idea.hook}&rdquo;
-                </p>
-              )}
-
-              {/* Used toggle */}
-              <div className="mt-auto pt-2 border-t border-[#1a1a1a]">
-                <button
-                  onClick={() => toggleUsed(idea)}
-                  className={cn(
-                    "flex items-center gap-2 text-xs font-medium transition-colors",
-                    idea.used
-                      ? "text-[#555] hover:text-[#888]"
-                      : "text-[#666] hover:text-green-400"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "w-4 h-4 rounded border-2 flex items-center justify-center transition-colors",
-                      idea.used
-                        ? "bg-[#555] border-[#555]"
-                        : "border-[#444] hover:border-[#666]"
-                    )}
-                  >
-                    {idea.used && <Check size={10} className="text-white" />}
-                  </div>
-                  {idea.used ? "Usada" : "Marcar como usada"}
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((idea) => <IdeaCard key={idea.id} idea={idea} onToggleUsed={toggleUsed} />)}
         </div>
       )}
 
@@ -341,6 +360,17 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
                   value={form.hook}
                   onChange={(e) => setForm((f) => ({ ...f, hook: e.target.value }))}
                   placeholder="A frase que vai parar o scroll..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-[#666] mb-1.5">Descrição / Briefing</label>
+                <textarea
+                  rows={4}
+                  className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555] transition-colors resize-none"
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="O que esse post precisa comunicar, tom, estrutura, dados a incluir..."
                 />
               </div>
 

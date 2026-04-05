@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
-  const { title, channel, format, hook } = body
+  const { title, channel, format, hook, description } = body
 
   if (!title || !channel || !format) {
     return NextResponse.json(
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       channel,
       format,
       hook: hook ?? null,
+      description: description ?? null,
     },
   })
 

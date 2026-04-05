@@ -7,7 +7,7 @@ export async function PATCH(
 ) {
   const { id } = await params
   const body = await request.json()
-  const { title, channel, format, hook, used } = body
+  const { title, channel, format, hook, description, used } = body
 
   try {
     const idea = await prisma.contentIdea.update({
@@ -17,6 +17,7 @@ export async function PATCH(
         ...(channel !== undefined && { channel }),
         ...(format !== undefined && { format }),
         ...(hook !== undefined && { hook }),
+        ...(description !== undefined && { description }),
         ...(used !== undefined && { used: Boolean(used) }),
       },
     })
