@@ -31,6 +31,7 @@ const FORMAT_COLORS: Record<string, string> = {
   CTA: "#BA7517",
   Erro: "#F59E0B",
   Case: "#22C55E",
+  Provocação: "#F43F5E",
 }
 
 function FormatBadge({ format }: { format: string }) {
@@ -325,7 +326,6 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
                     {Object.keys(FORMAT_COLORS).map((f) => (
                       <option key={f} value={f}>{f}</option>
                     ))}
-                    <option value="Outro">Outro</option>
                   </select>
                 </div>
               </div>
