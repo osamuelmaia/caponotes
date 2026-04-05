@@ -1,13 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
-import { createClient } from "@libsql/client";
 import path from "path";
 
 const dbPath = path
   .join(process.cwd(), "prisma", "yomescapo.db")
   .replace(/\\/g, "/");
-const libsql = createClient({ url: `file:///${dbPath}` });
-const adapter = new PrismaLibSql(libsql);
+const url = process.env.TURSO_DATABASE_URL ?? `file:///${dbPath}`;
+const authToken = process.env.TURSO_AUTH_TOKEN;
+const adapter = new PrismaLibSql({ url, authToken });
 const prisma = new PrismaClient({ adapter });
 
 function getCurrentWeek(): string {
