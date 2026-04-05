@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import type { Task } from "@prisma/client"
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -29,7 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   const created = await prisma.$transaction(
-    sourceTasks.map((task: Task) =>
+    sourceTasks.map((task: (typeof sourceTasks)[number]) =>
       prisma.task.create({
         data: {
           name: task.name,
