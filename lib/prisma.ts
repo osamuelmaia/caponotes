@@ -7,7 +7,9 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrisma() {
-  const libsql = createClient({ url: "file:prisma/yomescapo.db" });
+  const url = process.env.TURSO_DATABASE_URL ?? "file:prisma/yomescapo.db";
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+  const libsql = createClient({ url, authToken });
   const adapter = new PrismaLibSql(libsql);
   return new PrismaClient({ adapter });
 }
