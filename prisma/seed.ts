@@ -1,9 +1,11 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
+import { createClient } from "@libsql/client";
 import path from "path";
 
 const dbPath = path.join(process.cwd(), "prisma/yomescapo.db");
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
+const libsql = createClient({ url: `file:${dbPath}` });
+const adapter = new PrismaLibSQL(libsql);
 const prisma = new PrismaClient({ adapter });
 
 function getCurrentWeek(): string {
