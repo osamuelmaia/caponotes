@@ -1,11 +1,13 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSQL } from "@prisma/adapter-libsql";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { createClient } from "@libsql/client";
 import path from "path";
 
-const dbPath = path.join(process.cwd(), "prisma/yomescapo.db");
-const libsql = createClient({ url: `file:${dbPath}` });
-const adapter = new PrismaLibSQL(libsql);
+const dbPath = path
+  .join(process.cwd(), "prisma", "yomescapo.db")
+  .replace(/\\/g, "/");
+const libsql = createClient({ url: `file:///${dbPath}` });
+const adapter = new PrismaLibSql(libsql);
 const prisma = new PrismaClient({ adapter });
 
 function getCurrentWeek(): string {
