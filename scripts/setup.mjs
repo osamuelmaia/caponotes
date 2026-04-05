@@ -1,7 +1,7 @@
 /**
  * Runs at Vercel build time:
  * 1. Creates tables (idempotent)
- * 2. Seeds tasks + ideas if DB is empty
+ * 2. Seeds tasks + ideas for current ISO week (re-seeds if week changed)
  */
 import { createClient } from "@libsql/client";
 import path from "node:path";
@@ -10,12 +10,23 @@ import { randomUUID } from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const url =
+// ISO 8601 week — same logic as lib/week.ts
+function getCurrentWeek() {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+const dbUrl =
   process.env.TURSO_DATABASE_URL ??
   `file:${path.join(__dirname, "../prisma/yomescapo.db")}`;
 const authToken = process.env.TURSO_AUTH_TOKEN;
 
-const client = createClient({ url, authToken });
+const client = createClient({ url: dbUrl, authToken });
 
 // ── 1. Create tables ──────────────────────────────────────────────────────────
 await client.executeMultiple(`
@@ -54,25 +65,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS "WeeklyMetric_week_key" ON "WeeklyMetric"("wee
 `);
 console.log("✓ Setup: tabelas verificadas");
 
-// ── 2. Check if already seeded ────────────────────────────────────────────────
-const { rows } = await client.execute(`SELECT COUNT(*) as count FROM "Task"`);
+// ── 2. Check week — re-seed if missing or wrong week ─────────────────────────
+const week = getCurrentWeek();
+const { rows } = await client.execute({
+  sql: `SELECT COUNT(*) as count FROM "Task" WHERE week = ?`,
+  args: [week],
+});
 const count = Number(rows[0].count);
 if (count > 0) {
-  console.log(`✓ Setup: banco já tem ${count} tarefas, seed ignorado`);
+  console.log(`✓ Setup: semana ${week} já tem ${count} tarefas, seed ignorado`);
   client.close();
   process.exit(0);
 }
+// Clean up tasks from wrong weeks and re-seed
+await client.execute(`DELETE FROM "Task"`);
+console.log(`✓ Setup: re-seeding para semana ${week}`);
 
-// ── 3. Seed ───────────────────────────────────────────────────────────────────
-function getCurrentWeek() {
-  const now = new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86400000);
-  const weekNumber = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
-  return `${now.getFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
-}
-
-const week = getCurrentWeek();
+// ── 3. Seed tasks ─────────────────────────────────────────────────────────────
 const now = new Date().toISOString();
 
 const tasks = [
@@ -113,37 +122,43 @@ for (const t of tasks) {
   });
 }
 
-const ideas = [
-  { title: "Como eu fiz R$X em Y dias com bot no Telegram", channel: "Twitter/X", format: "Thread", hook: "Eu não sabia nada de programação. Hoje meu bot vende sozinho." },
-  { title: "7 erros que todo afiliado comete no Telegram", channel: "Twitter/X", format: "Thread", hook: "Erro número 1 já elimina 90% das suas vendas." },
-  { title: "Print de resultado: R$X em 24h com uma mensagem", channel: "Twitter/X", format: "Print", hook: "Uma mensagem. 24 horas. Esse número." },
-  { title: "O segredo que as pessoas não contam sobre vender no Telegram", channel: "Twitter/X", format: "Thread", hook: "Todo mundo fala de produto. Ninguém fala disso." },
-  { title: "Bastidor: o que construímos essa semana no Yomescapo", channel: "Twitter/X", format: "Bastidor", hook: "Olha o que saiu do forno hoje." },
-  { title: "CTA: Grátis. Você só paga quando vende.", channel: "Twitter/X", format: "CTA", hook: "Grátis. Você só paga quando vende." },
-  { title: "Como configurar seu primeiro bot de vendas em 30 minutos", channel: "Twitter/X", format: "Thread", hook: "30 minutos. Sem código. Sem servidor." },
-  { title: "Por que a maioria das pessoas falha vendendo no Telegram", channel: "Twitter/X", format: "Erro", hook: "Não é o produto. Não é o preço." },
-  { title: "O modelo de mensagem que converte 3x mais", channel: "Twitter/X", format: "Tutorial", hook: "Copiei esse modelo e as vendas triplicaram." },
-  { title: "Capo Community: resultados dos membros dessa semana", channel: "Twitter/X", format: "Print", hook: "Eles chegaram sem saber nada. Olha onde estão agora." },
-  { title: "Como criar um bot de vendas no Telegram do zero", channel: "YouTube", format: "Tutorial", hook: "No final desse vídeo você vai ter um bot funcionando." },
-  { title: "Como automatizar suas vendas no Telegram em 2025", channel: "YouTube", format: "Tutorial", hook: "Automação que roda enquanto você dorme." },
-  { title: "Como eu fiz minha primeira venda automática no Telegram", channel: "YouTube", format: "Tutorial", hook: "Do zero à primeira venda em menos de 1 semana." },
-  { title: "Como configurar pagamento automático no Telegram", channel: "YouTube", format: "Tutorial", hook: "Cliente paga, recebe acesso, você não faz nada." },
-  { title: "Como criar uma lista VIP no Telegram que realmente vende", channel: "YouTube", format: "Tutorial", hook: "Lista VIP não é grupo. É sistema." },
-  { title: "O funil de vendas que usei para fazer R$X no Telegram", channel: "YouTube", format: "Tutorial", hook: "Esse funil tem 3 etapas. Deixa eu te mostrar." },
-  { title: "Como fazer copy para Telegram que converte", channel: "YouTube", format: "Tutorial", hook: "A maioria das mensagens está errada. Veja o certo." },
-  { title: "Revisão ao vivo: bot de membro da Capo Community", channel: "YouTube", format: "Tutorial", hook: "Peguei o bot de um membro e melhorei ao vivo." },
-  { title: "Como usar o Yomescapo para vender todo dia", channel: "YouTube", format: "Tutorial", hook: "Tour completo pela plataforma." },
-  { title: "Erros que destroem suas vendas no Telegram", channel: "YouTube", format: "Tutorial", hook: "Eu cometi todos esses erros. Você não precisa." },
-  { title: "Como escalar vendas no Telegram sem trabalhar mais", channel: "YouTube", format: "Tutorial", hook: "Mais vendas. Menos trabalho. É possível." },
-  { title: "Resultados reais de membros da Capo Community", channel: "YouTube", format: "Tutorial", hook: "Eles entraram do zero. Esses são os números deles." },
-];
+// ── 4. Seed ideas (only if table is empty) ────────────────────────────────────
+const { rows: ideaRows } = await client.execute(`SELECT COUNT(*) as count FROM "ContentIdea"`);
+const ideaCount = Number(ideaRows[0].count);
 
-for (const idea of ideas) {
-  await client.execute({
-    sql: `INSERT INTO "ContentIdea" (id, title, channel, format, hook, used, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)`,
-    args: [randomUUID(), idea.title, idea.channel, idea.format, idea.hook ?? null, now],
-  });
+if (ideaCount === 0) {
+  const ideas = [
+    { title: "Como eu fiz R$X em Y dias com bot no Telegram", channel: "Twitter/X", format: "Thread", hook: "Eu não sabia nada de programação. Hoje meu bot vende sozinho." },
+    { title: "7 erros que todo afiliado comete no Telegram", channel: "Twitter/X", format: "Thread", hook: "Erro número 1 já elimina 90% das suas vendas." },
+    { title: "Print de resultado: R$X em 24h com uma mensagem", channel: "Twitter/X", format: "Print", hook: "Uma mensagem. 24 horas. Esse número." },
+    { title: "O segredo que as pessoas não contam sobre vender no Telegram", channel: "Twitter/X", format: "Thread", hook: "Todo mundo fala de produto. Ninguém fala disso." },
+    { title: "Bastidor: o que construímos essa semana no Yomescapo", channel: "Twitter/X", format: "Bastidor", hook: "Olha o que saiu do forno hoje." },
+    { title: "CTA: Grátis. Você só paga quando vende.", channel: "Twitter/X", format: "CTA", hook: "Grátis. Você só paga quando vende." },
+    { title: "Como configurar seu primeiro bot de vendas em 30 minutos", channel: "Twitter/X", format: "Thread", hook: "30 minutos. Sem código. Sem servidor." },
+    { title: "Por que a maioria das pessoas falha vendendo no Telegram", channel: "Twitter/X", format: "Erro", hook: "Não é o produto. Não é o preço." },
+    { title: "O modelo de mensagem que converte 3x mais", channel: "Twitter/X", format: "Tutorial", hook: "Copiei esse modelo e as vendas triplicaram." },
+    { title: "Capo Community: resultados dos membros dessa semana", channel: "Twitter/X", format: "Print", hook: "Eles chegaram sem saber nada. Olha onde estão agora." },
+    { title: "Como criar um bot de vendas no Telegram do zero", channel: "YouTube", format: "Tutorial", hook: "No final desse vídeo você vai ter um bot funcionando." },
+    { title: "Como automatizar suas vendas no Telegram em 2025", channel: "YouTube", format: "Tutorial", hook: "Automação que roda enquanto você dorme." },
+    { title: "Como eu fiz minha primeira venda automática no Telegram", channel: "YouTube", format: "Tutorial", hook: "Do zero à primeira venda em menos de 1 semana." },
+    { title: "Como configurar pagamento automático no Telegram", channel: "YouTube", format: "Tutorial", hook: "Cliente paga, recebe acesso, você não faz nada." },
+    { title: "Como criar uma lista VIP no Telegram que realmente vende", channel: "YouTube", format: "Tutorial", hook: "Lista VIP não é grupo. É sistema." },
+    { title: "O funil de vendas que usei para fazer R$X no Telegram", channel: "YouTube", format: "Tutorial", hook: "Esse funil tem 3 etapas. Deixa eu te mostrar." },
+    { title: "Como fazer copy para Telegram que converte", channel: "YouTube", format: "Tutorial", hook: "A maioria das mensagens está errada. Veja o certo." },
+    { title: "Revisão ao vivo: bot de membro da Capo Community", channel: "YouTube", format: "Tutorial", hook: "Peguei o bot de um membro e melhorei ao vivo." },
+    { title: "Como usar o Yomescapo para vender todo dia", channel: "YouTube", format: "Tutorial", hook: "Tour completo pela plataforma." },
+    { title: "Erros que destroem suas vendas no Telegram", channel: "YouTube", format: "Tutorial", hook: "Eu cometi todos esses erros. Você não precisa." },
+    { title: "Como escalar vendas no Telegram sem trabalhar mais", channel: "YouTube", format: "Tutorial", hook: "Mais vendas. Menos trabalho. É possível." },
+    { title: "Resultados reais de membros da Capo Community", channel: "YouTube", format: "Tutorial", hook: "Eles entraram do zero. Esses são os números deles." },
+  ];
+  for (const idea of ideas) {
+    await client.execute({
+      sql: `INSERT INTO "ContentIdea" (id, title, channel, format, hook, used, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)`,
+      args: [randomUUID(), idea.title, idea.channel, idea.format, idea.hook ?? null, now],
+    });
+  }
+  console.log(`✓ Setup: ${ideas.length} ideias criadas`);
 }
 
-console.log(`✓ Setup: ${tasks.length} tarefas e ${ideas.length} ideias criadas para ${week}`);
+console.log(`✓ Setup: ${tasks.length} tarefas criadas para ${week}`);
 client.close();
