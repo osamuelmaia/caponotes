@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import * as Dialog from "@radix-ui/react-dialog"
-import { X, Clock, Edit2 } from "lucide-react"
-import { ChannelBadge } from "@/components/channel-badge"
+import { X, Clock, Edit2, Trash2 } from "lucide-react"
+import { ChannelBadge, CHANNEL_COLORS } from "@/components/channel-badge"
 import { StatusBadge, statusBorderColor, STATUS_LABELS, type TaskStatus } from "@/components/status-badge"
 import { cn } from "@/lib/utils"
 
@@ -20,19 +20,29 @@ export interface Task {
   position: number
 }
 
+const ALL_CHANNELS = ["Twitter/X", "YouTube", "Telegram", "Discord", "Planejamento"]
+const ALL_DAYS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+
 interface TaskCardProps {
   task: Task
   onUpdate?: (updated: Task) => void
+  onDelete?: (id: string) => void
 }
 
-export function TaskCard({ task, onUpdate }: TaskCardProps) {
+export function TaskCard({ task, onUpdate, onDelete }: TaskCardProps) {
   const [localTask, setLocalTask] = useState<Task>(task)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(task.name)
   const [editDetails, setEditDetails] = useState(task.details ?? "")
   const [editStatus, setEditStatus] = useState<TaskStatus>(task.status as TaskStatus)
+  const [editDay, setEditDay] = useState(task.day)
+  const [editTimeSlot, setEditTimeSlot] = useState(task.timeSlot)
+  const [editChannels, setEditChannels] = useState<string[]>(() => {
+    try { return JSON.parse(task.channels) } catch { return [task.channels] }
+  })
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const channels: string[] = (() => {
     try { return JSON.parse(localTask.channels) } catch { return [localTask.channels] }
@@ -41,26 +51,33 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
   const isDone = localTask.status === "done"
   const borderColor = statusBorderColor(localTask.status)
 
+  function openEdit() {
+    setEditName(localTask.name)
+    setEditDetails(localTask.details ?? "")
+    setEditStatus(localTask.status as TaskStatus)
+    setEditDay(localTask.day)
+    setEditTimeSlot(localTask.timeSlot)
+    try { setEditChannels(JSON.parse(localTask.channels)) } catch { setEditChannels([localTask.channels]) }
+    setEditing(true)
+  }
+
   async function toggleDone() {
     const newStatus = isDone ? "todo" : "done"
-    // Optimistic update
     const updated = { ...localTask, status: newStatus }
     setLocalTask(updated)
     onUpdate?.(updated)
-
     try {
       const res = await fetch(`/api/tasks/${localTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       })
-      if (!res.ok) throw new Error("Falha ao atualizar")
+      if (!res.ok) throw new Error()
       const data = await res.json()
       setLocalTask(data)
       onUpdate?.(data)
-      toast.success(newStatus === "done" ? "Tarefa concluída!" : "Tarefa reaberta")
+      toast.success(newStatus === "done" ? "Tarefa concluída! ✓" : "Tarefa reaberta")
     } catch {
-      // Revert
       setLocalTask(localTask)
       onUpdate?.(localTask)
       toast.error("Erro ao atualizar tarefa")
@@ -68,14 +85,23 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
   }
 
   async function saveEdit() {
+    if (!editName.trim()) { toast.error("Nome é obrigatório"); return }
+    if (editChannels.length === 0) { toast.error("Selecione ao menos um canal"); return }
     setSaving(true)
     try {
       const res = await fetch(`/api/tasks/${localTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName, details: editDetails, status: editStatus }),
+        body: JSON.stringify({
+          name: editName,
+          details: editDetails,
+          status: editStatus,
+          day: editDay,
+          timeSlot: editTimeSlot,
+          channels: JSON.stringify(editChannels),
+        }),
       })
-      if (!res.ok) throw new Error("Falha ao salvar")
+      if (!res.ok) throw new Error()
       const data = await res.json()
       setLocalTask(data)
       onUpdate?.(data)
@@ -86,6 +112,28 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function deleteTask() {
+    if (!confirm("Deletar esta tarefa?")) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/tasks/${localTask.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error()
+      setOpen(false)
+      onDelete?.(localTask.id)
+      toast.success("Tarefa deletada")
+    } catch {
+      toast.error("Erro ao deletar tarefa")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  function toggleChannel(ch: string) {
+    setEditChannels(prev =>
+      prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]
+    )
   }
 
   return (
@@ -107,7 +155,6 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
               ? "bg-green-500 border-green-500 flex items-center justify-center"
               : "border-[#444] hover:border-[#666]"
           )}
-          aria-label={isDone ? "Marcar como não concluída" : "Marcar como concluída"}
         >
           {isDone && (
             <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
@@ -120,13 +167,7 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
         <div className="flex-1 min-w-0">
           <button
             className="text-left w-full"
-            onClick={() => {
-              setEditName(localTask.name)
-              setEditDetails(localTask.details ?? "")
-              setEditStatus(localTask.status as TaskStatus)
-              setEditing(false)
-              setOpen(true)
-            }}
+            onClick={() => { setEditing(false); setOpen(true) }}
           >
             <p className={cn(
               "text-sm font-medium text-[#fafafa] leading-snug hover:text-white transition-colors",
@@ -135,7 +176,6 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
               {localTask.name}
             </p>
           </button>
-
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {localTask.timeSlot && (
               <span className="flex items-center gap-1 text-[10px] text-[#666]">
@@ -150,8 +190,8 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
         </div>
       </div>
 
-      {/* Detail / Edit Sheet */}
-      <Dialog.Root open={open} onOpenChange={setOpen}>
+      {/* Detail / Edit Dialog */}
+      <Dialog.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(false) }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
           <Dialog.Content
@@ -166,6 +206,7 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                     className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Nome da tarefa"
                     autoFocus
                   />
                 ) : (
@@ -173,12 +214,12 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                     {localTask.name}
                   </Dialog.Title>
                 )}
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {channels.map((ch) => (
-                    <ChannelBadge key={ch} channel={ch} />
-                  ))}
-                  <StatusBadge status={localTask.status} />
-                </div>
+                {!editing && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {channels.map((ch) => <ChannelBadge key={ch} channel={ch} />)}
+                    <StatusBadge status={localTask.status} />
+                  </div>
+                )}
               </div>
               <Dialog.Close className="p-1.5 rounded-lg text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors">
                 <X size={18} />
@@ -187,13 +228,9 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="flex items-center gap-2 text-sm text-[#888]">
-                <Clock size={14} />
-                <span>{localTask.day} · {localTask.timeSlot}</span>
-              </div>
-
               {editing ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* Status */}
                   <div>
                     <label className="block text-xs text-[#666] mb-1.5">Status</label>
                     <select
@@ -206,10 +243,60 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                       ))}
                     </select>
                   </div>
+
+                  {/* Day + TimeSlot */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-[#666] mb-1.5">Dia</label>
+                      <select
+                        className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
+                        value={editDay}
+                        onChange={(e) => setEditDay(e.target.value)}
+                      >
+                        {ALL_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#666] mb-1.5">Horário</label>
+                      <input
+                        className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
+                        value={editTimeSlot}
+                        onChange={(e) => setEditTimeSlot(e.target.value)}
+                        placeholder="ex: 9h–10h"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Channels */}
+                  <div>
+                    <label className="block text-xs text-[#666] mb-2">Canais</label>
+                    <div className="flex flex-wrap gap-2">
+                      {ALL_CHANNELS.map(ch => (
+                        <button
+                          key={ch}
+                          type="button"
+                          onClick={() => toggleChannel(ch)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                            editChannels.includes(ch) ? "opacity-100" : "opacity-40 hover:opacity-70"
+                          )}
+                          style={
+                            editChannels.includes(ch)
+                              ? { color: CHANNEL_COLORS[ch] ?? "#888", borderColor: CHANNEL_COLORS[ch] ?? "#888", background: `${CHANNEL_COLORS[ch] ?? "#888"}18` }
+                              : { color: "#888", borderColor: "#333" }
+                          }
+                        >
+                          {ch}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Details */}
                   <div>
                     <label className="block text-xs text-[#666] mb-1.5">Detalhes / Instruções</label>
                     <textarea
-                      className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555] resize-none min-h-[160px]"
+                      className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555] resize-none min-h-[120px]"
                       value={editDetails}
                       onChange={(e) => setEditDetails(e.target.value)}
                       placeholder="Adicione detalhes ou instruções..."
@@ -217,13 +304,15 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                   </div>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-[#888]">
+                    <Clock size={14} />
+                    <span>{localTask.day} · {localTask.timeSlot}</span>
+                  </div>
                   {localTask.details ? (
                     <div>
                       <p className="text-xs text-[#666] mb-2">Detalhes</p>
-                      <p className="text-sm text-[#ccc] leading-relaxed whitespace-pre-wrap">
-                        {localTask.details}
-                      </p>
+                      <p className="text-sm text-[#ccc] leading-relaxed whitespace-pre-wrap">{localTask.details}</p>
                     </div>
                   ) : (
                     <p className="text-sm text-[#555] italic">Sem detalhes adicionados.</p>
@@ -233,9 +322,9 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t border-[#222222] flex items-center gap-2">
+            <div className="p-5 border-t border-[#222222] space-y-2">
               {editing ? (
-                <>
+                <div className="flex gap-2">
                   <button
                     onClick={saveEdit}
                     disabled={saving}
@@ -249,16 +338,9 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                   >
                     Cancelar
                   </button>
-                </>
+                </div>
               ) : (
-                <>
-                  <button
-                    onClick={() => setEditing(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#333] text-sm text-[#888] hover:text-white hover:border-[#555] transition-colors"
-                  >
-                    <Edit2 size={14} />
-                    Editar
-                  </button>
+                <div className="flex gap-2">
                   <button
                     onClick={toggleDone}
                     className={cn(
@@ -268,9 +350,24 @@ export function TaskCard({ task, onUpdate }: TaskCardProps) {
                         : "bg-green-600 text-white hover:bg-green-500"
                     )}
                   >
-                    {isDone ? "Reabrir tarefa" : "Marcar como concluída"}
+                    {isDone ? "Reabrir" : "Marcar como concluída"}
                   </button>
-                </>
+                  <button
+                    onClick={openEdit}
+                    className="px-3 py-2 rounded-lg border border-[#333] text-[#888] hover:text-white hover:border-[#555] transition-colors"
+                    title="Editar"
+                  >
+                    <Edit2 size={15} />
+                  </button>
+                  <button
+                    onClick={deleteTask}
+                    disabled={deleting}
+                    className="px-3 py-2 rounded-lg border border-[#333] text-[#888] hover:text-red-400 hover:border-red-800 transition-colors disabled:opacity-50"
+                    title="Deletar"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               )}
             </div>
           </Dialog.Content>

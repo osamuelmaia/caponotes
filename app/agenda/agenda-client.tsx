@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import * as Tabs from "@radix-ui/react-tabs"
-import { ChevronLeft, ChevronRight, Copy, CheckCircle2 } from "lucide-react"
+import * as Dialog from "@radix-ui/react-dialog"
+import { ChevronLeft, ChevronRight, Copy, CheckCircle2, Plus, X } from "lucide-react"
 import { toast } from "sonner"
 import { TaskCard, type Task } from "@/components/task-card"
 import { ChannelBadge, CHANNEL_COLORS } from "@/components/channel-badge"
@@ -40,6 +41,146 @@ function DayProgress({ tasks }: { tasks: Task[] }) {
   )
 }
 
+const FORM_DAYS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+const FORM_CHANNELS = ["Twitter/X", "YouTube", "Telegram", "Discord", "Planejamento"]
+
+function NewTaskModal({ currentWeek, onCreated }: { currentWeek: string; onCreated: (task: Task) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [day, setDay] = useState("Segunda")
+  const [timeSlot, setTimeSlot] = useState("")
+  const [channels, setChannels] = useState<string[]>(["Twitter/X"])
+  const [details, setDetails] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  function toggleChannel(ch: string) {
+    setChannels(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch])
+  }
+
+  async function create() {
+    if (!name.trim()) { toast.error("Nome é obrigatório"); return }
+    if (channels.length === 0) { toast.error("Selecione ao menos um canal"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, day, timeSlot, channels: JSON.stringify(channels), details, week: currentWeek, position: 999 }),
+      })
+      if (!res.ok) throw new Error()
+      const task = await res.json()
+      onCreated(task)
+      toast.success("Tarefa criada!")
+      setOpen(false)
+      setName(""); setTimeSlot(""); setDetails(""); setChannels(["Twitter/X"]); setDay("Segunda")
+    } catch {
+      toast.error("Erro ao criar tarefa")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-black text-sm font-medium hover:bg-[#e5e5e5] transition-colors">
+          <Plus size={14} />
+          Nova tarefa
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content className="fixed right-0 top-0 z-50 h-full w-full max-w-md bg-[#111111] border-l border-[#222222] shadow-2xl flex flex-col" style={{ outline: "none" }}>
+          <div className="flex items-center justify-between p-5 border-b border-[#222222]">
+            <Dialog.Title className="text-base font-semibold text-white">Nova tarefa</Dialog.Title>
+            <Dialog.Close className="p-1.5 rounded-lg text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div>
+              <label className="block text-xs text-[#666] mb-1.5">Nome *</label>
+              <input
+                autoFocus
+                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Nome da tarefa"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-[#666] mb-1.5">Dia *</label>
+                <select
+                  className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
+                  value={day}
+                  onChange={e => setDay(e.target.value)}
+                >
+                  {FORM_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[#666] mb-1.5">Horário</label>
+                <input
+                  className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555]"
+                  value={timeSlot}
+                  onChange={e => setTimeSlot(e.target.value)}
+                  placeholder="ex: 9h–10h"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-[#666] mb-2">Canais *</label>
+              <div className="flex flex-wrap gap-2">
+                {FORM_CHANNELS.map(ch => (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => toggleChannel(ch)}
+                    className={cn("px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                      channels.includes(ch) ? "opacity-100" : "opacity-40 hover:opacity-70"
+                    )}
+                    style={
+                      channels.includes(ch)
+                        ? { color: CHANNEL_COLORS[ch] ?? "#888", borderColor: CHANNEL_COLORS[ch] ?? "#888", background: `${CHANNEL_COLORS[ch] ?? "#888"}18` }
+                        : { color: "#888", borderColor: "#333" }
+                    }
+                  >
+                    {ch}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-[#666] mb-1.5">Detalhes / Instruções</label>
+              <textarea
+                className="w-full bg-[#1a1a1a] border border-[#333] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-[#555] resize-none min-h-[100px]"
+                value={details}
+                onChange={e => setDetails(e.target.value)}
+                placeholder="Opcional..."
+              />
+            </div>
+          </div>
+
+          <div className="p-5 border-t border-[#222222]">
+            <button
+              onClick={create}
+              disabled={saving}
+              className="w-full py-2.5 rounded-lg bg-white text-black text-sm font-medium hover:bg-[#e5e5e5] transition-colors disabled:opacity-50"
+            >
+              {saving ? "Criando..." : "Criar tarefa"}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
 export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientProps) {
   const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -64,6 +205,14 @@ export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientP
 
   const handleTaskUpdate = useCallback((updated: Task) => {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+  }, [])
+
+  const handleTaskCreate = useCallback((task: Task) => {
+    setTasks((prev) => [...prev, task])
+  }, [])
+
+  const handleTaskDelete = useCallback((id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
   function navigateWeek(direction: "prev" | "next") {
@@ -124,6 +273,7 @@ export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientP
             <Copy size={14} />
             {duplicating ? "Copiando..." : "Duplicar semana"}
           </button>
+          <NewTaskModal currentWeek={currentWeek} onCreated={handleTaskCreate} />
         </div>
       </div>
 
@@ -228,7 +378,7 @@ export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientP
                             <TaskCard
                               key={task.id}
                               task={task}
-                              onUpdate={handleTaskUpdate}
+                              onUpdate={handleTaskUpdate} onDelete={handleTaskDelete}
                             />
                           ))}
                         </div>
@@ -283,7 +433,7 @@ export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientP
                   ) : (
                     <div className="space-y-1.5">
                       {channelTasks.map((task) => (
-                        <TaskCard key={task.id} task={task} onUpdate={handleTaskUpdate} />
+                        <TaskCard key={task.id} task={task} onUpdate={handleTaskUpdate} onDelete={handleTaskDelete} />
                       ))}
                     </div>
                   )}
@@ -326,7 +476,7 @@ export function AgendaClient({ tasks: initialTasks, currentWeek }: AgendaClientP
                   ) : (
                     <div className="space-y-1.5">
                       {statusTasks.map((task) => (
-                        <TaskCard key={task.id} task={task} onUpdate={handleTaskUpdate} />
+                        <TaskCard key={task.id} task={task} onUpdate={handleTaskUpdate} onDelete={handleTaskDelete} />
                       ))}
                     </div>
                   )}
