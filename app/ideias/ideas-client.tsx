@@ -51,7 +51,10 @@ function FormatBadge({ format }: { format: string }) {
 }
 
 export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
-  const [ideas, setIdeas] = useState<ContentIdea[]>(initialIdeas)
+  // Normalize used field: Turso returns 0/1 (integers), coerce to boolean
+  const [ideas, setIdeas] = useState<ContentIdea[]>(
+    initialIdeas.map((i) => ({ ...i, used: Boolean(i.used) }))
+  )
   const [channelFilter, setChannelFilter] = useState<string | null>(null)
   const [usedFilter, setUsedFilter] = useState<boolean | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -86,7 +89,7 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
       })
       if (!res.ok) throw new Error("Erro ao criar")
       const created = await res.json()
-      setIdeas((prev) => [created, ...prev])
+      setIdeas((prev) => [{ ...created, used: Boolean(created.used) }, ...prev])
       toast.success("Ideia criada!")
       setModalOpen(false)
       setForm({ title: "", channel: "Twitter/X", format: "Thread", hook: "" })
@@ -111,7 +114,7 @@ export function IdeasClient({ ideas: initialIdeas }: IdeasClientProps) {
       })
       if (!res.ok) throw new Error("Erro ao atualizar")
       const updated = await res.json()
-      setIdeas((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
+      setIdeas((prev) => prev.map((i) => (i.id === updated.id ? { ...updated, used: Boolean(updated.used) } : i)))
       toast.success(newUsed ? "Ideia marcada como usada!" : "Ideia reativada")
     } catch {
       setIdeas((prev) =>
