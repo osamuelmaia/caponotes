@@ -1,18 +1,13 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { createClient } from "@libsql/client";
-import path from "node:path";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrisma() {
-  const dbPath = path
-    .join(process.cwd(), "prisma", "yomescapo.db")
-    .replace(/\\/g, "/");
-  const url = `file:///${dbPath}`;
-  const libsql = createClient({ url });
+  const libsql = createClient({ url: "file:prisma/yomescapo.db" });
   const adapter = new PrismaLibSql(libsql);
   return new PrismaClient({ adapter });
 }
